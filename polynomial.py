@@ -172,28 +172,34 @@ class Expansion (object):
         if res == "": res = "0"
         return res
 
-class Polynomial2 (object):
+class Polynomial (object):
     """
-    Polynomial of two variables
+    Polynomial of n variables
     """
-    x0 = "x0"
-    x1 = "x1"
+    @staticmethod
+    def variable (i):
+        return "x_{%i}"%i
 
     def __init__ (self, *args):
         """ Initialization by a monomial of the form
-        c x^i y^j with
-        c = coeff,
-        i = pow0,
-        j = pow1
+        c x_i^j with args = (c, i, j)
+        variable indexing starts at 0
         """
         if len (args) == 3:
-            coeff, pow0, pow1 = args
-            self.coefficients = {(pow0,pow1):coeff}
+            c, i, j = args
+            if j == 0:
+                self.coefficients = {() : c}
+            else:
+                self.coefficients = {i*(0,)+(j,):c}
         elif len (args) == 0:
             self.coefficients = dict ()
         elif len (args) == 1:
             other = args [0]
             self.coefficients = other.coefficients.copy ()
+        elif len (args) == 2:
+            # value, exponent
+            value = args [0]; exp = tuple (args [1])
+            self.coefficients = {exp : value}
 
     def clean (self):
         for k, v in self.coefficients.items ():
@@ -202,7 +208,7 @@ class Polynomial2 (object):
         return self
 
     def __rmul__ (self, other):
-        result = Polynomial2 (self)
+        result = Polynomial (self)
         for k in result.coefficients.keys ():
             result.coefficients [k] *= other
         return result.clean ()
@@ -211,16 +217,16 @@ class Polynomial2 (object):
         """
         Addition with a real number
         """
-        return self + Polynomial2 (other, 0, 0)
+        return self + Polynomial (other, 0, 0)
 
     def __rsub__ (self, other):
         """
         Substraction with a real number
         """
-        return Polynomial2 (other, 0, 0) - self
+        return Polynomial (other, 0, 0) - self
 
     def __add__ (self, other):
-        result = Polynomial2 (self)
+        result = Polynomial (self)
         for k, c in other.coefficients.items ():
             if k in result.coefficients.keys ():
                 result.coefficients [k] += c
@@ -229,7 +235,7 @@ class Polynomial2 (object):
         return result.clean ()
 
     def __sub__ (self, other):
-        result = Polynomial2 (self)
+        result = Polynomial (self)
         for k, c in other.coefficients.items ():
             if k in result.coefficients.keys ():
                 result.coefficients [k] -= c
@@ -241,19 +247,24 @@ class Polynomial2 (object):
         coefficients = dict ()
         for k in self.coefficients.keys ():
             coefficients [k] = -self.coefficients [k]
-        result = Polynomial2 ()
+        result = Polynomial ()
         result.coefficients = coefficients
         return result
-        
+
     def __mul__ (self, other):
-        result = Polynomial2 ()
+        result = Polynomial ()
         if isscalar (other):
             for k1, v1 in self.coefficients.items ():
                 result.coefficients [k1] = v1*other
         else:
             for k1, v1 in self.coefficients.items ():
                 for k2,v2 in other.coefficients.items ():
-                    result += Polynomial2 (v1*v2, k1[0]+k2[0],k1[1]+k2[1])
+                    l1 = len (k1); l2 = len (k2)
+                    l = max (l1, l2)
+                    k1 = k1 + (l - l1)* (0,)
+                    k2 = k2 + (l - l2)* (0,)
+                    result += Polynomial (v1*v2, map (lambda x: x [0] +x [1],
+                                                      zip (k1, k2)))
             result.clean ()
         return result
 
@@ -261,16 +272,19 @@ class Polynomial2 (object):
         if not isinstance (i, int):
             raise TypeError ("power operator takes an int as second argument")
         if i==1:
-            return Polynomial2 (self)
+            return Polynomial (self)
         if i==0:
-            return Polynomial2 (1, 0, 0)
+            return Polynomial (1, 0, 0)
         else:
             return self*(self**(i-1))
 
-    def __call__ (self, x0, x1):
+    def __call__ (self, *args):
         result = 0
         for k,v in self.coefficients.items ():
-            result += v*x0**k[0]*x1**k[1]
+            monomial = Polynomial (v, 0, 0)
+            for ki, xi in zip (k, args):
+                monomial *= xi**ki
+            result += monomial
         return result
 
     def truncate (self, degree):
@@ -278,31 +292,35 @@ class Polynomial2 (object):
             if reduce (lambda x, y: x+y, k) > degree:
                 del self.coefficients [k]
 
-    @staticmethod
-    def comp (k1, k2):
-        if k1 [0] + k1 [1] < k2 [0] + k2 [1] : return -1
-        elif k1 [0] + k1 [1] == k2 [0] + k2 [1] :
-            if k1 [0] < k2 [0] : return -1
-            elif k1 [0] > k2 [0] : return 1
-            else : return 0
-        else: return 1
-
     def __str__ (self):
         result = ""
-        for k in sorted (self.coefficients.keys (), Polynomial2.comp):
+        for k in sorted (self.coefficients.keys ()):
             if self.coefficients [k] > 0:
                 result += " + "
-            if self.coefficients [k] != 1 or k[0] == k[1] == 0:
-                result += str (self.coefficients [k])
-            if k [0] != 0:
-                result += self.x0
-                if k [0] != 1:
-                    result += "^" + str (k[0])
-            if k [1] != 0:
-                result += "." + self.x1
-                if k [1] != 1:
-                    result += "^" + str (k[1])
+            result += str (self.coefficients [k])
+
+            for i, ki in zip (xrange (1000000), k):
+                if ki != 0:
+                    result += self.variable (i)
+                    if ki != 1:
+                        result += "^" + str (ki)
         return result
+
+    def __int__ (self):
+        if len (self.coefficients.keys ()) == 0:
+            return 0
+        if self.coefficients.keys () == [()]:
+            return int (self.coefficients [()])
+        raise TypeError ("Cannot convert polynomial to float")
+
+    def __float__ (self):
+        if len (self.coefficients.keys ()) == 0:
+            return 0.0
+        if self.coefficients.keys () == [()]:
+            return float (self.coefficients [()])
+        raise TypeError ("Cannot convert polynomial to float")
+
+
 
 x = Expansion ([0,1])
 
@@ -313,10 +331,3 @@ sin = reduce (lambda x,y : x+y, [Fraction ((-1)**i, fact(2*i+1))*x**(2*i+1) \
 # 1/(1+x)
 one_over_one_plus = reduce (lambda x,y : x+y, [(-1)**i*x**i for i in range (20)])
 one_over_one_minus = reduce (lambda x,y : x+y, [x**i for i in range (20)])
-p1 = Polynomial2 (1, 0, 0)
-p2 = Polynomial2 (1, 1, 0)
-p3 = Polynomial2 (1, 0, 1)
-
-alpha_r = Polynomial2 (1,1,1)
-alpha_r.x0 = "alpha"
-alpha_r.x1 = "r"

@@ -20,7 +20,7 @@
 from __future__ import division
 from math import sqrt
 from fractions import Fraction
-from polynomial import Expansion, Polynomial2, isscalar
+from polynomial import Expansion, Polynomial, isscalar
 import numpy as np
 import matplotlib.pyplot as pl
 
@@ -89,11 +89,15 @@ if __name__ == '__main__':
     beta2 = (2*(1-cos)-r*sin)/(2*r**2*(1-cos))
     J = RodriguesLike (Fraction (-1,2), beta2)
 
-    Polynomial2.x0 = "alpha"
-    Polynomial2.x1 = "r"
-    Polynomial2.r2 = r**2
-    alpha = Polynomial2 (1,1,0)
-    r = Polynomial2 (1,0,1)
+    def variable (self, i):
+        if i == 0:
+            return "alpha"
+        if i == 1:
+            return "r"
+
+    Polynomial.variable = variable
+    alpha = Polynomial (1,0,1)
+    r = Polynomial (1,1,1)
 
     x = Expansion ([0,1])
     RodriguesLike.r2 = r**2
